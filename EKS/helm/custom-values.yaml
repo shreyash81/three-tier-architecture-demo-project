@@ -1,1 +1,14 @@
+# custom-values.yaml
+# ─────────────────────────────────────────────────────────────
+# Yeh file sirf CI/CD ke liye hai
+# Original values.yaml ko touch mat karo
+# CI automatically "version" field update karta hai
+# ─────────────────────────────────────────────────────────────
 
+image:
+  repo: chauhanshreyash18
+  version: latest        # ← CI har push pe yeh update karega (commit SHA)
+  pullPolicy: Always     # ← naya image hamesha pull hoga
+
+# Baaki sab original values.yaml se aayega
+# Yahan kuch aur likhne ki zaroorat nahi
