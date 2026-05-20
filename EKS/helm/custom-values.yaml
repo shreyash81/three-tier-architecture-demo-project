@@ -7,7 +7,7 @@
 
 image:
   repo: chauhanshreyash18
-  version: 458b899847701c87a1315a4ed43d9c568299a3a8
+  version: latest
   pullPolicy: Always     # ← naya image hamesha pull hoga
 
 # Baaki sab original values.yaml se aayega
