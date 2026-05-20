@@ -7,7 +7,7 @@
 
 image:
   repo: chauhanshreyash18
-  version: latest        # ← CI har push pe yeh update karega (commit SHA)
+  version: 8ecc43fb7c47ee9a88672fed13d802a2b563e2eb
   pullPolicy: Always     # ← naya image hamesha pull hoga
 
 # Baaki sab original values.yaml se aayega
