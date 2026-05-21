@@ -1,0 +1,76 @@
+name: CI - Ratings
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'ratings/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ratings/**'
+      - '.github/workflows/ratings.yaml'
+
+jobs:
+  build:
+    name: Build and Push Ratings Image
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Set image tag
+        id: tag
+        run: echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Docker Login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./ratings
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/rs-ratings:${{ steps.tag.outputs.tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/rs-ratings:latest
+
+  update-helm-values:
+    name: Update custom-values.yaml
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+          submodules: false
+
+      - name: Update version in custom-values.yaml
+        run: |
+          NEW_TAG="${{ needs.build.outputs.image_tag }}"
+          sed -i "/^ratings:/,/^[^ ]/ s|^  version:.*|  version: ${NEW_TAG}|" EKS/helm/custom-values.yaml
+
+      - name: Commit and push
+        run: |
+          git config user.name  "shreyash81"
+          git config user.email "chauhanshreyash357@gmail.com"
+          git add EKS/helm/custom-values.yaml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "ci(ratings): update image tag to ${{ needs.build.outputs.image_tag }} [skip ci]"
+            git push
+          fi
