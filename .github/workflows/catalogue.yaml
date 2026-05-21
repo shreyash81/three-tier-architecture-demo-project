@@ -1,42 +1,76 @@
-name: Catalogue
+name: CI - Catalogue
 
 on:
   push:
     branches:
-      - master
+      - main
     paths:
-      - '**.js'  # Only trigger on changes to Python files (**.py)
-      - '.github/workflows/catalogue.yaml'  # Include workflow file changes
-
+      - 'catalogue/**'
   pull_request:
     branches:
-      - master
+      - main
     paths:
-      - '**.js'  # Only trigger on changes to Python files (**.py)
-      - '.github/workflows/catalogue.yaml'  # Include workflow file changes
+      - 'catalogue/**'
+      - '.github/workflows/catalogue.yaml'
 
 jobs:
-  payment:
-    name: Build and deploy catalogue microservice
-    runs-on: [self-hosted]  # Use a standard runner instead of self-hosted
-
+  build:
+    name: Build and Push Catalogue Image
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
     steps:
-      - name: Checkout code 
-        uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: false
 
-      - name: NPM install
-        run: npm install 
+      - name: Set image tag
+        id: tag
+        run: echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
-      - name: Build Docker image
+      - name: Docker Login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./catalogue
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/rs-catalogue:${{ steps.tag.outputs.tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/rs-catalogue:latest
+
+  update-helm-values:
+    name: Update custom-values.yaml
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+          submodules: false
+
+      - name: Update version in custom-values.yaml
         run: |
-          docker build -t catalogue .  # Build image tagged as 'payment' from current directory
+          NEW_TAG="${{ needs.build.outputs.image_tag }}"
+          sed -i "/^catalogue:/,/^[^ ]/ s|^  version:.*|  version: ${NEW_TAG}|" EKS/helm/custom-values.yaml
 
-      - name: Docker Login (use secrets)
-        run: docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Docker Push
+      - name: Commit and push
         run: |
-          docker tag catalogue ${name}/catalogue:latest
-          docker catalogue ${name}/catalogue:latest
+          git config user.name  "shreyash81"
+          git config user.email "chauhanshreyash357@gmail.com"
+          git add EKS/helm/custom-values.yaml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "ci(catalogue): update image tag to ${{ needs.build.outputs.image_tag }} [skip ci]"
+            git push
+          fi
